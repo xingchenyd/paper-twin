@@ -5,7 +5,7 @@ pdfjs.GlobalWorkerOptions.workerSrc=new URL('./vendor/pdf.worker.mjs',import.met
 export async function loadPDF(bytes){return pdfjs.getDocument({data:new Uint8Array(bytes.slice(0)),cMapUrl:new URL('./vendor/cmaps/',import.meta.url).href,cMapPacked:true,standardFontDataUrl:new URL('./vendor/standard_fonts/',import.meta.url).href,isEvalSupported:false}).promise;}
 let fontBytes,font,canvasFont;
 export async function getFont(){
- if(!font){font=(async()=>{const r=await fetch(new URL('./vendor/PaperTwinSans.otf?v=0.3.2',import.meta.url),{signal:AbortSignal.timeout(60000)});if(!r.ok)throw Error('中文字体加载失败，请刷新重试');fontBytes=await r.arrayBuffer();const d=await PDFLib.PDFDocument.create();d.registerFontkit(fontkit);canvasFont=new FontFace('PaperChinese',fontBytes.slice(0));await canvasFont.load();document.fonts.add(canvasFont);return d.embedFont(fontBytes,{subset:false});})();font.catch(()=>{font=null;});}return font;
+ if(!font){font=(async()=>{const r=await fetch(new URL('./vendor/PaperTwinSans-v2.otf',import.meta.url),{signal:AbortSignal.timeout(60000)});if(!r.ok)throw Error('中文字体加载失败，请刷新重试');fontBytes=await r.arrayBuffer();const d=await PDFLib.PDFDocument.create();d.registerFontkit(fontkit);canvasFont=new FontFace('PaperChinese',fontBytes.slice(0));await canvasFont.load();document.fonts.add(canvasFont);return d.embedFont(fontBytes,{subset:false});})();font.catch(()=>{font=null;});}return font;
 }
 const words=s=>(s.match(/[a-zA-Z]{2,}/g)||[]).length;
 export async function extract(pdf,onProgress){
@@ -28,8 +28,8 @@ export async function render(pdf,record,n,left,right){
  const page=await pdf.getPage(n),pm=record.pages[n-1],scale=1.5,vp=page.getViewport({scale});
  for(const c of [left,right]){c.width=Math.ceil(vp.width);c.height=Math.ceil(vp.height);}
  await page.render({canvasContext:left.getContext('2d'),viewport:vp}).promise;
- const ctx=right.getContext('2d');ctx.drawImage(left,0,0);const f=await getFont();const targetRects={};let overflow=0;
- ctx.scale(scale,scale);for(const b of pm.blocks){const plan=layout(b,f);if(!plan){if(b.segments.some(s=>s.target))overflow++;for(const s of b.segments)targetRects[s.id]=s.sourceRects;continue;}ctx.fillStyle='white';for(const s of b.segments)for(const r of s.sourceRects)ctx.fillRect(r[0]-.4,r[1]-.6,r[2]-r[0]+.8,r[3]-r[1]+1.2);ctx.fillStyle='#111';ctx.font=`${plan.size}px PaperChinese`;ctx.textBaseline='top';for(const r of plan.rows){ctx.fillText(r.text,r.x,r.y);(targetRects[r.id]||=[]).push([r.x,r.y,r.x+r.w,r.y+r.h]);}}
+ const ctx=right.getContext('2d');ctx.drawImage(left,0,0);const f=pm.blocks.some(b=>b.segments.some(s=>s.target))?await getFont():null;const targetRects={};let overflow=0;
+ ctx.scale(scale,scale);for(const b of pm.blocks){const plan=f?layout(b,f):null;if(!plan){if(b.segments.some(s=>s.target))overflow++;for(const s of b.segments)targetRects[s.id]=s.sourceRects;continue;}ctx.fillStyle='white';for(const s of b.segments)for(const r of s.sourceRects)ctx.fillRect(r[0]-.4,r[1]-.6,r[2]-r[0]+.8,r[3]-r[1]+1.2);ctx.fillStyle='#111';ctx.font=`${plan.size}px PaperChinese`;ctx.textBaseline='top';for(const r of plan.rows){ctx.fillText(r.text,r.x,r.y);(targetRects[r.id]||=[]).push([r.x,r.y,r.x+r.w,r.y+r.h]);}}
  return {targetRects,overflow};
 }
 export async function exportPDF(record,onProgress){
