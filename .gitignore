@@ -1,0 +1,10 @@
+__pycache__/
+data/
+tmp/
+.env
+*.log
+.sites-runtime/
+
+.venv/
+output/
+api-config.json
