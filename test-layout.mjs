@@ -19,7 +19,13 @@ assert.equal(separated.length,2);assert(separated.every(b=>b.w===253));
 assert(separated[0].segments.map(s=>s.source).join(' ').includes('transport'));
 const compound=pageBlocks([{text:'A model with demand-',x:40,y:40,w:180,h:12},{text:'driven service uses trans\u2010',x:40,y:53,w:180,h:12},{text:'port to meet passenger needs.',x:40,y:66,w:180,h:12}],1);
 assert.equal(compound.blocks[0].segments.map(s=>s.source).join(' '),'A model with demand-driven service uses transport to meet passenger needs.');
-const {request}=await import('./site/api.js');
+const {request,translateBatch}=await import('./site/api.js');
 const original=globalThis.fetch;
 try{globalThis.fetch=async()=>({ok:false,status:503,json:async()=>({error:{type:'account_cooling_down'}})});await assert.rejects(request({base:'http://127.0.0.1:8790/v1',key:'fake'},'/models'),/冷却/);}finally{globalThis.fetch=original;}
+let sent;
+try{
+ globalThis.fetch=async(_url,options)=>{sent=JSON.parse(options.body);return {ok:true,json:async()=>({choices:[{message:{content:'{"word-1":"运输"}'}}]})};};
+ const out=await translateBatch({base:'https://api.test/v1',key:'fake',model:'test'},[{id:'word-1',source:'transport',context:'The transport service is efficient.'}],undefined,{kind:'word'});
+ assert.equal(out['word-1'],'运输');assert.match(sent.messages[0].content,/word or short term/);assert.equal(JSON.parse(sent.messages[1].content)[0].context,'The transport service is efficient.');
+}finally{globalThis.fetch=original;}
 console.log('PASS: narrow gutter separation, overlapping line boxes, dehyphenation, normal word spaces, 503 classification.');
