@@ -3,7 +3,7 @@ pdfjs.GlobalWorkerOptions.workerSrc=new URL('./vendor/pdf.worker.mjs',import.met
 export async function loadPDF(bytes){return pdfjs.getDocument({data:new Uint8Array(bytes.slice(0)),cMapUrl:new URL('./vendor/cmaps/',import.meta.url).href,cMapPacked:true,standardFontDataUrl:new URL('./vendor/standard_fonts/',import.meta.url).href,isEvalSupported:false}).promise;}
 let fontBytes,font,canvasFont;
 export async function getFont(){
- if(!font){font=(async()=>{const r=await fetch(new URL('./vendor/NotoSansCJKsc-Regular.otf',import.meta.url));if(!r.ok)throw Error('中文字体加载失败，请刷新重试');fontBytes=await r.arrayBuffer();const d=await PDFLib.PDFDocument.create();d.registerFontkit(fontkit);canvasFont=new FontFace('PaperChinese',fontBytes.slice(0));await canvasFont.load();document.fonts.add(canvasFont);return d.embedFont(fontBytes,{subset:false});})();font.catch(()=>{font=null;});}return font;
+ if(!font){font=(async()=>{const r=await fetch(new URL('./vendor/PaperTwinSans.otf',import.meta.url));if(!r.ok)throw Error('中文字体加载失败，请刷新重试');fontBytes=await r.arrayBuffer();const d=await PDFLib.PDFDocument.create();d.registerFontkit(fontkit);canvasFont=new FontFace('PaperChinese',fontBytes.slice(0));await canvasFont.load();document.fonts.add(canvasFont);return d.embedFont(fontBytes,{subset:false});})();font.catch(()=>{font=null;});}return font;
 }
 const words=s=>(s.match(/[a-zA-Z]{2,}/g)||[]).length;
 export async function extract(pdf,onProgress){
@@ -29,7 +29,7 @@ export async function extract(pdf,onProgress){
  if(!pages.some(p=>p.blocks.length))throw Error('未识别到可翻译英文正文。扫描件暂不支持，请使用有文本层的 PDF。');return pages;
 }
 export function layout(block,font){
- if(!block.segments.every(s=>s.target))return null;
+ if(!block.segments.every(s=>s.target))return null;const supported=new Set(font.getCharacterSet());if(block.segments.some(s=>[...s.target].some(c=>c!=='\n'&&!supported.has(c.codePointAt(0)))))return null;
  const available=block.w;const split=size=>{const rows=[];for(const s of block.segments){let line='';for(const char of s.target){if(char==='\n'||(line&&font.widthOfTextAtSize(line+char,size)>available)){rows.push({id:s.id,text:line});line=char==='\n'?'':char;}else line+=char;}if(line)rows.push({id:s.id,text:line});}return rows;};
  let size=Math.min(block.fontSize,12),rows;for(;size>=5.5;size-=.25){rows=split(size);if(rows.length*size*1.15<=block.h+1)break;}if(size<5.5)return null;
  return {size,rows:rows.map((r,i)=>({...r,x:block.x,y:block.y+i*size*1.15,w:font.widthOfTextAtSize(r.text,size),h:size*1.15}))};
