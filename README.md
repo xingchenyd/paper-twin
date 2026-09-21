@@ -4,7 +4,7 @@
 
 ## 启动
 
-安装 Python 3.11+，Windows 安装时勾选 Add Python to PATH。下载 Releases 中的 paper-twin-local.zip，解压后运行 `安装并启动.cmd`。首次需联网安装依赖。macOS/Linux 可运行 `sh start.sh`（尚未实测）。
+安装 Python 3.11+，Windows 安装时勾选 Add Python to PATH。下载 Releases 中的 paper-twin-local.zip，解压后运行 `安装并启动.cmd`。Windows 弹出启动提示框，点击后自动检查依赖；已有兼容版本直接复用，不运行 pip，不重复安装。缺失或版本不匹配时在专用 .venv 中安装，不修改系统 Python 的包。仅首次补齐依赖需联网。解压 ZIP 本身不会自动执行程序，需要双击启动。Python 需包含 tkinter。macOS/Linux 可运行 `sh start.sh`（尚未实测）。
 
 本机地址：http://127.0.0.1:8766/ 。关闭网页不会删除文库。助手只监听回环地址，不开放局域网访问。
 
@@ -28,3 +28,5 @@ Python + PyMuPDF 自定义布局实现；参考项目：BabelDOC、PDFMathTransl
 ## 公网发布
 
 site/ 为纯静态入口，通过 GitHub Pages 发布。GitHub Actions 仅部署静态文件；不运行用户翻译任务，不打包任何 data、密钥、日志或示例论文。安装包只含运行代码和说明。
+
+WorkBuddy 自动发送：官方本地助理 API 支持发送任务，但需要审核通过的第三方应用及用户 OAuth 授权。本版尚不具备该条件，仍保留手动任务桥接，未使用模拟点击或读取客户端私有登录凭据。
