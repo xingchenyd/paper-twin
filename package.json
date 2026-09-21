@@ -1,4 +1,10 @@
 {
+  "name": "paper-twin",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test-layout.mjs"
+  },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",
     "pdf-lib": "^1.17.1",

@@ -1,5 +1,5 @@
-import {translateBatch} from './api.js?v=0.5.0';
-import {get,patch} from './storage.js?v=0.5.0';
+import {translateBatch} from './api.js?v=0.6.0';
+import {get,patch} from './storage.js?v=0.6.0';
 let controller;
 self.onmessage=async({data})=>{
  if(data.type==='stop'){controller?.abort();return;}

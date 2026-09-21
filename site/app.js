@@ -1,6 +1,7 @@
-import * as store from './storage.js?v=0.5.0';
-import {loadPDF,extract,render,exportPDF,PARSER_VERSION} from './pdf-engine.js?v=0.5.0';
-import {normalize,models,translateBatch} from './api.js?v=0.5.0';
+import * as store from './storage.js?v=0.6.0';
+import {loadPDF,extract,render,exportPDF,PARSER_VERSION} from './pdf-engine.js?v=0.6.0';
+import {normalize,models,translateBatch} from './api.js?v=0.6.0';
+import {lookup as dictionaryLookup} from './dictionary.js?v=0.6.0';
 const $=id=>document.getElementById(id);
 let current,pdf,pageNumber=1,records=[],busy=false,job=null,painting=Promise.resolve(),paintVersion=0,pinned=null,view='home',quickAbort=null,quickToken=null,paragraphMode=false,clickTimer;
 let config={base:'',key:'',model:'',concurrency:2};try{const saved=JSON.parse(localStorage.getItem('paper-twin-api')||'{}');config.base=saved.base||'';config.model=saved.model||'';config.concurrency=Number(saved.concurrency)||2;}catch{}
@@ -11,19 +12,26 @@ function allSegments(){return current.pages.flatMap(p=>p.blocks.flatMap(b=>b.seg
 function metadata(){const list=allSegments(),done=list.filter(s=>s.target).length;$('title').textContent=current.name;$('progress').textContent=`${current.pages.length} 页 · 已翻译 ${done} / ${list.length} 个片段${job?' · 正在翻译':''}`;$('page').value=pageNumber;$('page').max=current.pages.length;$('total').textContent=` / ${current.pages.length}`;$('prev').disabled=pageNumber===1;$('next').disabled=pageNumber===current.pages.length;$('translate').disabled=!!job||done===list.length;$('translate').textContent=done===list.length?'译文已生成':done?'继续翻译':'开始翻译';$('stop').hidden=!job;$('download').disabled=!done;}
 async function persist(){current.updated=Date.now();current.lastPage=pageNumber;await store.save(current);}
 function mark(ids){document.querySelectorAll('.hit.active').forEach(n=>n.classList.remove('active'));for(const id of ids?(Array.isArray(ids)?ids:[ids]):[])document.querySelectorAll(`.hit[data-id="${id}"]`).forEach(n=>n.classList.add('active'));}
-function present(kind,source,target,ids=[],loading=false){pinned=ids.length?ids:true;mark(ids);$('selectionKind').textContent=kind;$('sourceText').textContent=source;$('targetText').textContent=target;$('sentence').hidden=false;$('sentence').setAttribute('aria-busy',String(loading));}
+function present(kind,source,target,ids=[],loading=false){pinned=ids.length?ids:true;mark(ids);$('selectionKind').textContent=kind;$('sourceText').textContent=source;$('targetText').textContent=target;$('aiWord').hidden=true;$('sentence').hidden=false;$('sentence').setAttribute('aria-busy',String(loading));}
 function wordAt(source,boxes,index,event){const widths=boxes.map(r=>r[2]-r[0]),total=widths.reduce((a,b)=>a+b,0),before=widths.slice(0,index).reduce((a,b)=>a+b,0),ratio=Math.max(0,Math.min(1,event.offsetX/Math.max(1,event.currentTarget.clientWidth))),at=(before+widths[index]*ratio)/total*source.length;const matches=[...source.matchAll(/[A-Za-z]+(?:['’][A-Za-z]+)*/g)];return (matches.find(m=>at>=m.index&&at<=m.index+m[0].length)||matches.sort((a,b)=>Math.abs(a.index+a[0].length/2-at)-Math.abs(b.index+b[0].length/2-at))[0])?.[0]||'';}
 async function instant(parts,kind,source,ids,{save=false}={}){
  if(!config.base||!config.key||!config.model){settings();tell('先保存 API 设置，再重新选择要翻译的内容。');return;}
  quickAbort?.abort();const controller=new AbortController(),token={};quickAbort=controller;quickToken=token;present(kind,source,'正在调用 API…',ids,true);
- try{const out=await translateBatch({...config},parts,controller.signal,{kind:kind==='单词'?'word':kind==='句子'?'sentence':'paragraph'});if(quickToken!==token)return;
+ try{const out=await translateBatch({...config},parts,controller.signal,{kind:kind==='单词'||kind==='AI 语境翻译'?'word':kind==='句子'?'sentence':'paragraph'});if(quickToken!==token)return;
   if(save){for(const s of parts)s.target=out[s.id];await store.patch(current.id,{translations:out});metadata();scheduleDraw();}
   present(kind,source,parts.map(s=>out[s.id]).join('\n'),ids,false);
  }catch(e){if(quickToken===token&&!controller.signal.aborted){present(kind,source,'翻译失败',ids,false);tell(e.message);}}
  finally{if(quickToken===token){quickAbort=null;quickToken=null;$('sentence').setAttribute('aria-busy','false');}}
 }
+async function dictionaryWord(word,context,ids){
+ quickAbort?.abort();const controller=new AbortController(),token={};quickAbort=controller;quickToken=token;present('本地词典',word,'正在查询 ECDICT…',ids,true);
+ try{const entry=await dictionaryLookup(word,controller.signal);if(quickToken!==token)return;if(!entry){instant([{id:`word-${Date.now()}`,source:word,context}],'单词',word,ids);return;}
+  const head=entry.phonetic?`${word} /${entry.phonetic}/`:word,target=[entry.pos?`词性：${entry.pos}`:'',entry.translation].filter(Boolean).join('\n');present('本地词典 · ECDICT',head,target,ids,false);$('aiWord').hidden=false;$('aiWord').onclick=()=>instant([{id:`word-${Date.now()}`,source:word,context}],'AI 语境翻译',word,ids);
+ }catch(e){if(quickToken===token&&!controller.signal.aborted){present('本地词典',word,'查询失败',ids,false);tell(e.message);}}
+ finally{if(quickToken===token){quickAbort=null;quickToken=null;$('sentence').setAttribute('aria-busy','false');}}
+}
 function overlays(pm,targetRects){
- for(const side of ['left','right']){const parent=$(side+'Overlay');parent.replaceChildren();for(const b of pm.blocks)for(const s of b.segments){const boxes=side==='left'?s.sourceRects:targetRects[s.id]||[];boxes.forEach((r,i)=>{const node=document.createElement('button');node.className='hit';node.dataset.id=s.id;node.dataset.rectIndex=i;node.tabIndex=i? -1:0;node.setAttribute('aria-label',side==='left'?`翻译句子：${s.source}`:s.target||s.source);Object.assign(node.style,{left:`${r[0]/pm.width*100}%`,top:`${r[1]/pm.height*100}%`,width:`${(r[2]-r[0])/pm.width*100}%`,height:`${(r[3]-r[1])/pm.height*100}%`});node.onmouseenter=()=>{if(!pinned)mark(s.id);};node.onmouseleave=()=>{if(!pinned)mark(null);};node.onfocus=()=>mark(s.id);node.onclick=e=>{if(paragraphMode||e.detail>1)return;clearTimeout(clickTimer);clickTimer=setTimeout(()=>instant([s],'句子',s.source,[s.id],{save:true}),240);};if(side==='left')node.ondblclick=e=>{e.preventDefault();clearTimeout(clickTimer);const word=wordAt(s.source,boxes,i,e);if(word)instant([{id:`word-${Date.now()}`,source:word,context:s.source}],'单词',word,[s.id]);};parent.append(node);});}}
+ for(const side of ['left','right']){const parent=$(side+'Overlay');parent.replaceChildren();for(const b of pm.blocks)for(const s of b.segments){const boxes=side==='left'?s.sourceRects:targetRects[s.id]||[];boxes.forEach((r,i)=>{const node=document.createElement('button');node.className='hit';node.dataset.id=s.id;node.dataset.rectIndex=i;node.tabIndex=i? -1:0;node.setAttribute('aria-label',side==='left'?`翻译句子：${s.source}`:s.target||s.source);Object.assign(node.style,{left:`${r[0]/pm.width*100}%`,top:`${r[1]/pm.height*100}%`,width:`${(r[2]-r[0])/pm.width*100}%`,height:`${(r[3]-r[1])/pm.height*100}%`});node.onmouseenter=()=>{if(!pinned)mark(s.id);};node.onmouseleave=()=>{if(!pinned)mark(null);};node.onfocus=()=>mark(s.id);node.onclick=e=>{if(paragraphMode||e.detail>1)return;clearTimeout(clickTimer);clickTimer=setTimeout(()=>instant([s],'句子',s.source,[s.id],{save:true}),240);};if(side==='left')node.ondblclick=e=>{e.preventDefault();clearTimeout(clickTimer);const word=wordAt(s.source,boxes,i,e);if(word)dictionaryWord(word,s.source,[s.id]);};parent.append(node);});}}
 }
 function setParagraphMode(on){paragraphMode=on;$('paragraphSelect').setAttribute('aria-pressed',String(on));$('paragraphSelect').textContent=on?'× 退出框选':'▣ 段落框选';$('leftOverlay').classList.toggle('selecting',on);if(on){pinned=null;mark(null);tell('在左侧英文页面拖出矩形，松开后立即翻译区域内的句子。');}}
 let selectionDrag=null;
@@ -53,7 +61,7 @@ function fromForm(requireModel=true){const next={base:normalize($('baseUrl').val
 function scheduleDraw(){if(document.hidden||view!=='reader')return;clearTimeout(scheduleDraw.timer);scheduleDraw.timer=setTimeout(()=>draw().catch(e=>tell(e.message)),250);}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&current)scheduleDraw();});
 async function start(){if(job||busy)return;if(!config.base||!config.key||!config.model){settings();tell('先设置 API，再点击“开始翻译”。');return;}
- const worker=new Worker(new URL('./translation-worker.js?v=0.5.0',import.meta.url),{type:'module'});job={abort:()=>worker.postMessage({type:'stop'})};metadata();tell('正在后台翻译，可切换标签页或其他程序；请保持浏览器与 API 服务运行。',true);
+ const worker=new Worker(new URL('./translation-worker.js?v=0.6.0',import.meta.url),{type:'module'});job={abort:()=>worker.postMessage({type:'stop'})};metadata();tell('正在后台翻译，可切换标签页或其他程序；请保持浏览器与 API 服务运行。',true);
  const finish=message=>{worker.terminate();job=null;metadata();scheduleDraw();tell(message);};
  worker.onmessage=({data})=>{if(data.type==='batch'){for(const s of allSegments())if(Object.hasOwn(data.translations,s.id))s.target=data.translations[s.id];metadata();scheduleDraw();}else if(data.type==='done')finish(data.error|| (data.stopped?'已停止，进度已保存。':'译文已保存，可下载 PDF。'));};
  worker.onerror=e=>{e.preventDefault();finish('后台翻译任务异常，请刷新后从历史记录继续。已保存的译文不会丢失。');};
