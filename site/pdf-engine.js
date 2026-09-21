@@ -1,4 +1,4 @@
-import {pageBlocks,PARSER_VERSION} from './text-layout.js?v=0.3.2';
+import {pageBlocks,PARSER_VERSION} from './text-layout.js?v=0.4.0';
 export {PARSER_VERSION};
 import * as pdfjs from './vendor/pdf.mjs';
 pdfjs.GlobalWorkerOptions.workerSrc=new URL('./vendor/pdf.worker.mjs',import.meta.url).href;
@@ -12,7 +12,7 @@ export async function extract(pdf,onProgress){
  const pages=[];let bibliography=false;
  for(let n=1;n<=pdf.numPages;n++){
   const p=await pdf.getPage(n);if(p.rotate!==0)throw Error('旋转页面暂不支持，请先将 PDF 页面旋转归正。');const vp=p.getViewport({scale:1}),tc=await p.getTextContent();
-  const items=tc.items.filter(i=>i.str?.trim()).map(i=>{const t=pdfjs.Util.transform(vp.transform,i.transform),h=Math.hypot(t[2],t[3])||i.height;const style=tc.styles[i.fontName]||{},ascent=style.ascent??.9,descent=style.descent??-.25;return {text:i.str,x:t[4],y:t[5]-h*ascent,w:i.width,h:h*(ascent-descent),rotated:Math.abs(t[1])>.1};}).sort((a,b)=>a.y-b.y||a.x-b.x);
+  const items=tc.items.filter(i=>i.str?.trim()).map(i=>{const t=pdfjs.Util.transform(vp.transform,i.transform),h=Math.hypot(t[2],t[3])||i.height;const style=tc.styles[i.fontName]||{},ascent=style.ascent??.9,descent=style.descent??-.25;return {text:i.str,x:t[4],y:t[5]-h*ascent,w:i.width,fontSize:h,h:h*(ascent-descent),rotated:Math.abs(t[1])>.1};}).sort((a,b)=>a.y-b.y||a.x-b.x);
   const result=pageBlocks(items,n,{bibliography});const blocks=result.blocks;bibliography=result.bibliography;
   pages.push({width:vp.width,height:vp.height,blocks});onProgress(n,pdf.numPages);await new Promise(r=>setTimeout(r,0));
  }
