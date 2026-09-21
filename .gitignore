@@ -8,3 +8,18 @@ tmp/
 .venv/
 output/
 api-config.json
+
+node_modules/
+# Retained privately for migration; no longer part of the published app
+dist/
+engine.py
+server.py
+api_translate.py
+launch.py
+setup_launcher.pyw
+requirements.txt
+api-config.example.json
+start.sh
+*.cmd
+WORKBUDDY_TASK.md
+verify_app.py

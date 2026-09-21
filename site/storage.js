@@ -1,0 +1,6 @@
+const opened=new Promise((resolve,reject)=>{const r=indexedDB.open('paper-twin-browser',1);r.onupgradeneeded=()=>r.result.createObjectStore('documents',{keyPath:'id'});r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(Error('无法使用浏览器存储，请检查浏览器设置。'));});
+async function transaction(mode,action){const db=await opened;return new Promise((resolve,reject)=>{const t=db.transaction('documents',mode);let result;const r=action(t.objectStore('documents'));r.onsuccess=()=>result=r.result;t.oncomplete=()=>resolve(result);t.onerror=()=>reject(Error('本地保存失败，可能空间不足。请导出备份后清理历史。'));t.onabort=()=>reject(Error('本地保存已中断，请导出备份。'));});}
+export const save=d=>transaction('readwrite',s=>s.put(d));
+export const get=id=>transaction('readonly',s=>s.get(id));
+export const remove=id=>transaction('readwrite',s=>s.delete(id));
+export async function list(){const db=await opened;return new Promise((resolve,reject)=>{const output=[];const t=db.transaction('documents');const r=t.objectStore('documents').openCursor();r.onsuccess=()=>{const c=r.result;if(c){const {id,name,pages,lastPage,updated}=c.value;output.push({id,name,pageCount:pages.length,translated:pages.flatMap(p=>p.blocks.flatMap(b=>b.segments)).filter(s=>s.target).length,lastPage,updated});c.continue();}};t.oncomplete=()=>resolve(output.sort((a,b)=>b.updated-a.updated));t.onerror=()=>reject(Error('历史记录读取失败'));});}
