@@ -1,6 +1,6 @@
-import * as store from './storage.js';
-import {loadPDF,extract,render,exportPDF} from './pdf-engine.js';
-import {normalize,models,translateBatch} from './api.js';
+import * as store from './storage.js?v=0.3.1';
+import {loadPDF,extract,render,exportPDF} from './pdf-engine.js?v=0.3.1';
+import {normalize,models,translateBatch} from './api.js?v=0.3.1';
 const $=id=>document.getElementById(id);
 let current,pdf,pageNumber=1,records=[],busy=false,job=null,painting=Promise.resolve(),paintVersion=0,pinned=null,view='home';
 let config={base:'',key:'',model:''};try{const saved=JSON.parse(localStorage.getItem('paper-twin-api')||'{}');config.base=saved.base||'';config.model=saved.model||'';}catch{}
