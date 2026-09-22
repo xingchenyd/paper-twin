@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {pageBlocks} from './site/text-layout.js';
+import {layout} from './site/pdf-engine.js';
 const items=[];
 const left=['The rail transit demand is growing and trans-','port service capacity remains insufficient.','This left column describes passenger demand.'];
 const right=['To solve the mismatch problem there are two methods.','Adjust capacity and control passenger demand.','This right column describes operating strategies.'];
@@ -28,4 +29,11 @@ try{
  const out=await translateBatch({base:'https://api.test/v1',key:'fake',model:'test'},[{id:'word-1',source:'transport',context:'The transport service is efficient.'}],undefined,{kind:'word'});
  assert.equal(out['word-1'],'运输');assert.match(sent.messages[0].content,/word or short term/);assert.equal(JSON.parse(sent.messages[1].content)[0].context,'The transport service is efficient.');
 }finally{globalThis.fetch=original;}
-console.log('PASS: narrow gutter separation, overlapping line boxes, dehyphenation, normal word spaces, 503 classification.');
+const fakeFont={getCharacterSet:()=>[...new Set([...'第一句完整译文第二句仍待翻译'])].map(c=>c.codePointAt(0)),widthOfTextAtSize:(s,size)=>[...s].length*size};
+const plan=layout({fontSize:10,segments:[
+ {id:'s1',target:'第一句完整译文',sourceRects:[[10,10,60,22],[10,24,60,36]]},
+ {id:'s2',target:'',sourceRects:[[65,10,115,22]]}
+]},fakeFont);
+assert.equal(plan.segments.length,1);assert.deepEqual(plan.missing,['s2']);assert.equal(plan.failed.length,0);
+for(const row of plan.rows){const slot=[[10,10,60,22],[10,24,60,36]].find(r=>row.x>=r[0]&&row.x+row.w<=r[2]+.01&&row.y>=r[1]&&row.y+row.h<=r[3]+.01);assert(slot,'translation must remain inside a source line fragment');}
+console.log('PASS: columns, dehyphenation, line-fragment layout, partial translation, and API errors.');

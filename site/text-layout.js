@@ -1,5 +1,5 @@
 // Spatial paragraph extraction. Never join columns just because baselines match.
-export const PARSER_VERSION=3;
+export const PARSER_VERSION=4;
 const words=text=>(text.match(/[a-zA-Z]{2,}/g)||[]).length;
 export function pageBlocks(items,pageNumber,{bibliography=false}={}){
  const rows=[];
@@ -23,7 +23,10 @@ export function pageBlocks(items,pageNumber,{bibliography=false}={}){
    // Word spacing is much narrower than a gutter; the former 2em threshold
    // swallowed typical 10–16pt journal gutters and interleaved whole columns.
    const column=seam===null?0:item.x+item.w<=seam?1:item.x>=seam?2:0;
-   if(!run||run.column!==column||gap>Math.max(4,Math.min(item.fontSize||item.h,run.fontSize||run.h)*.65)){
+   // Justified PDFs often expose every word as an individual text item with a
+   // 6–9pt gap. Keep those words on one line; column assignment still guards
+   // the central gutter, while table-cell gaps remain substantially wider.
+   if(!run||run.column!==column||gap>Math.max(12,Math.min(item.fontSize||item.h,run.fontSize||run.h)*1.2)){
     run={...item,column,right:item.x+item.w};runs.push(run);
    }else{run.text+=(gap>item.h*.12?' ':'')+item.text;run.right=Math.max(run.right,item.x+item.w);run.w=run.right-run.x;run.h=Math.max(run.h,item.h);run.rotated ||= item.rotated;}
   }
@@ -53,8 +56,8 @@ export function pageBlocks(items,pageNumber,{bibliography=false}={}){
    spans.push({...line,start:text.length,end:text.length+value.length});text+=value;
    if(!joins&&i<b.lines.length-1)text+=' ';
   }
-  b.segments=[...new Intl.Segmenter('en',{granularity:'sentence'}).segment(text)].map((s,i)=>({id:`${b.id}-s${i}`,source:s.segment.trim(),target:'',sourceRects:spans.filter(l=>l.end>s.index&&l.start<s.index+s.segment.length).map(l=>{const length=l.end-l.start,from=Math.max(0,s.index-l.start),to=Math.min(length,s.index+s.segment.length-l.start);return [l.x+l.w*from/length,l.y,l.x+l.w*to/length,l.y+l.h];})}));
+  b.segments=[...new Intl.Segmenter('en',{granularity:'sentence'}).segment(text)].map((s,i)=>({id:`${b.id}-s${i}`,source:s.segment.trim(),target:'',sourceRects:spans.filter(l=>l.end>s.index&&l.start<s.index+s.segment.length).map(l=>{const length=l.end-l.start,from=Math.max(0,s.index-l.start),to=Math.min(length,s.index+s.segment.length-l.start);return [l.x+l.w*from/length,l.y,l.x+l.w*to/length,l.y+l.h];})})).filter(s=>s.source&&s.sourceRects.some(r=>r[2]-r[0]>1&&r[3]-r[1]>1));
   b.h=b.bottom-b.y;delete b.lines;delete b.lastY;
  }
- return {blocks,bibliography};
+ return {blocks:blocks.filter(b=>b.segments.length),bibliography};
 }
